@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Rewrites a net8.0-built plugin so the game's .NET 6 runtime (BepInEx 6 IL2CPP) loads it:
+       usage (see README): dotnet run -c Release, then two dashes, then in.dll out.dll -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType><TargetFramework>net8.0</TargetFramework><Nullable>disable</Nullable>
+    <Ref Condition="'$(Ref)' == ''">C:\Program Files (x86)\Steam\steamapps\common\Tank Squad\BepInEx</Ref>
+  </PropertyGroup>
+  <ItemGroup><Reference Include="$(Ref)/core/Mono.Cecil.dll" /></ItemGroup>
+</Project>
