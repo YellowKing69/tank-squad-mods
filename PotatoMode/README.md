@@ -1,4 +1,4 @@
-# Potato Mode 1.4.3 (PotatoInjector)
+# Potato Mode 1.4.4 (PotatoInjector)
 
 Lower graphics memory and GPU load for Tank Squad on weaker PCs: texture mips, render scale, shadows, terrain and
 GPU Instancer vegetation settings, plus an optional shader warm-up. Runtime settings only - no game files are changed.
@@ -69,7 +69,7 @@ BasemapDistance - all -1 (leave).
 
 **Display**: Width / Height / WindowMode / TargetFrameRate / VSync - all leave the game's values by default.
 
-**General**: ReapplyIntervalSeconds (2), LiveReloadConfig (true), TickHooks (leave as is).
+**General**: ReapplyIntervalSeconds (-1 = off: settings are applied at start-up and whenever the config is saved; set e.g. 2 if the game undoes them), LiveReloadConfig (true), TickHooks (leave as is).
 
 **Debug**: `VerboseLog` (false) - writes what the plugin found and changed to the BepInEx log. Off = the plugin logs
 nothing (warnings still show).
@@ -80,8 +80,11 @@ See [Building from source](../README.md#building-from-source); the project is `s
 
 ## When it runs
 
-- Textures, rendering, shadows, terrain and display settings: applied at start-up, then re-checked every
-  `ReapplyIntervalSeconds` (2 s) in case the game resets them. Only changed values are written.
+- Textures, rendering, shadows, terrain and display settings: applied at start-up and whenever the config is saved.
+  With `ReapplyIntervalSeconds` set (e.g. 2) they are also re-checked that often, in case the game resets them;
+  only changed values are written. Default -1 = no re-checks.
+- If the game keeps putting a setting back, Potato Mode stops re-applying that one after 3 tries (rewriting it each
+  time causes a hitch) and says so once in the log. Set that setting to -1 / Leave.
 - GPUI vegetation: after every scene change (1, 3, 6, 12, 25 and 45 s after it, as the map loads), and once after
   each config save. Nothing runs in between.
 

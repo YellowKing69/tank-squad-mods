@@ -29,7 +29,7 @@ namespace PotatoMode
     {
         public const string Guid = "potatomode.vramtweaks";
         public const string PluginName = "Potato Mode";
-        public const string PluginVersion = "1.4.3";
+        public const string PluginVersion = "1.4.4";
 
         internal static PotatoModePlugin Instance;
 
@@ -87,6 +87,9 @@ namespace PotatoMode
 
         readonly HashSet<string> _warned = new();
         readonly Dictionary<string, int> _changeLogCount = new();
+        // Settings the game keeps putting back: re-writing them every time costs a hitch (render buffers are rebuilt),
+        // so after 3 rewrites the plugin stops touching that setting until the config is saved again.
+        readonly HashSet<string> _givenUp = new();
 
         public override void Load()
         {
@@ -164,8 +167,11 @@ namespace PotatoMode
             _vsync = Config.Bind("Display", "VSync", -1, "0 = off, 1 = every vblank, 2 = every second vblank." + leave);
 
             // General
-            _reapplyInterval = Config.Bind("General", "ReapplyIntervalSeconds", 2f,
-                "How often to re-check settings, in case the game resets them (e.g. on scene load or from its own menu).");
+            _reapplyInterval = Config.Bind("General", "ReapplyIntervalSeconds", -1f,
+                "How often (seconds) to re-check the settings, in case the game resets them (e.g. on a scene load or from its own menu). " +
+                "-1 = off: settings are applied at start-up and again whenever this file is saved, never in between. Try 2 if the game undoes them.");
+            var reapplyOff = Config.Bind("Debug", "ReapplyOffApplied", false, "Set by the plugin after it switched ReapplyIntervalSeconds to -1 once (1.4.4). Leave as is.");
+            if (!reapplyOff.Value) { _reapplyInterval.Value = -1f; reapplyOff.Value = true; }
             _watchFile = Config.Bind("General", "LiveReloadConfig", true,
                 "Reload this file automatically when you save it. Changing this needs a game restart.");
             _tickHooks = Config.Bind("General", "TickHooks", "MEC.Timing:Update;AstarPath:Update",
@@ -281,6 +287,7 @@ namespace PotatoMode
                 {
                     Config.Reload(); // also tells GpuiTweaks to re-apply (ConfigReloaded event)
                     _changeLogCount.Clear();
+                    _givenUp.Clear();
                     Quiet.Info(Log, "Config reloaded.");
                 }
                 catch (Exception e) { Log.LogWarning($"Config reload failed: {e.Message}"); }
@@ -289,7 +296,8 @@ namespace PotatoMode
             }
 
             if (now < _nextApply) return;
-            _nextApply = now + Math.Max(0.25f, _reapplyInterval.Value);
+            // -1 (any negative) = no periodic re-check: apply now, then only again after a config reload.
+            _nextApply = _reapplyInterval.Value < 0f ? float.MaxValue : now + Math.Max(0.25f, _reapplyInterval.Value);
 
             if (!_displayApplied) { ApplyDisplay(); _displayApplied = true; }
             ApplyQuality();
@@ -322,7 +330,9 @@ namespace PotatoMode
                         _ => AnisotropicFiltering.ForceEnable
                     });
 
-            if (_msaa.Value >= 1)
+            // On URP the pipeline keeps QualitySettings.antiAliasing in step with its own MSAA setting (set in ApplyUrp),
+            // so writing it here would fight the game every re-check and rebuild the render buffers each time.
+            if (_msaa.Value >= 1 && GetUrpAsset() == null)
                 Set("MSAA (built-in)", () => QualitySettings.antiAliasing,
                     v => QualitySettings.antiAliasing = v, _msaa.Value <= 1 ? 0 : _msaa.Value);
 
@@ -503,6 +513,7 @@ namespace PotatoMode
         // ---------------- helpers ----------------
         void Set<T>(string label, Func<T> get, Action<T> set, T want)
         {
+            if (_givenUp.Contains(label)) return;
             try
             {
                 var cur = get();
@@ -518,6 +529,7 @@ namespace PotatoMode
         // which Il2CppInterop exposes as a writable property.
         void SetMember(object obj, Type type, string label, object want, params string[] names)
         {
+            if (_givenUp.Contains(label)) return;
             var flags = BindingFlags.Public | (obj == null ? BindingFlags.Static : BindingFlags.Instance);
             foreach (var name in names)
             {
@@ -561,9 +573,12 @@ namespace PotatoMode
             _changeLogCount[label] = n + 1;
             if (n < 3)
                 Quiet.Info(Log, $"{label}: {from} -> {to}");
-            else if (n == 3)
-                Log.LogWarning($"{label}: the game keeps resetting this; still re-applying, but no longer logging it. " +
-                               "If you see flicker, set this one to -1/Leave.");
+            else
+            {
+                _givenUp.Add(label);
+                Log.LogWarning($"{label}: the game keeps putting this back, so Potato Mode has stopped re-applying it " +
+                               "(each rewrite can cause a hitch). Set this one to -1 / Leave to keep the game's value.");
+            }
         }
 
         void WarnOnce(string label, Exception e, string msg = null)
