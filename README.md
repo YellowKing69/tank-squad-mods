@@ -7,6 +7,7 @@ BepInEx 6 (IL2CPP) plugins, with their source.
 
 | Mod | What it does |
 |---|---|
+| [ControlTweaksLite](ControlTweaksLite/) | Turret aim speed per zoom, gunner-sight turret inertia, commander zoom speed and steadied binoculars - with the game's own sights |
 | [PotatoMode](PotatoMode/) | Lower graphics memory / GPU load: textures, render scale, shadows, terrain, vegetation (formerly PotatoInjector) |
 | [QuickCrew](QuickCrew/) | Shorter holds, faster hatch / visor / binocular transitions, seat and squad-attack hotkeys, AI gunner control |
 | [PotatoVFX](PotatoVFX/) | Lighter shell and MG tracers, barrel smoke and rocket-trail toggles |
