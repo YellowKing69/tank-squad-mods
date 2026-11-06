@@ -29,7 +29,7 @@ namespace PotatoMode
     {
         public const string Guid = "potatomode.vramtweaks";
         public const string PluginName = "Potato Mode";
-        public const string PluginVersion = "1.4.2";
+        public const string PluginVersion = "1.4.3";
 
         internal static PotatoModePlugin Instance;
 
@@ -247,7 +247,7 @@ namespace PotatoMode
                 if (!_tickFailed) { _tickFailed = true; Log.LogError($"Tick failed (further errors suppressed): {e}"); }
             }
 
-            // Runs on its own 5-second timer and catches its own errors.
+            // Scans on its own schedule after each scene change (and after a config change); catches its own errors.
             try { GpuiTweaks.Tick(); } catch { /* already logged inside GpuiTweaks */ }
         }
 

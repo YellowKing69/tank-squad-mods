@@ -1,4 +1,4 @@
-# Potato Mode 1.4.2 (PotatoInjector)
+# Potato Mode 1.4.3 (PotatoInjector)
 
 Lower graphics memory and GPU load for Tank Squad on weaker PCs: texture mips, render scale, shadows, terrain and
 GPU Instancer vegetation settings, plus an optional shader warm-up. Runtime settings only - no game files are changed.
@@ -56,7 +56,7 @@ BasemapDistance - all -1 (leave).
 **GPUI Vegetation** (the game's trees, bushes and grass are drawn by GPU Instancer)
 | Setting | Default | |
 |---|---|---|
-| Enabled | true | Master switch; false restores every profile's original values. |
+| Enabled | true | Master switch for the whole section. false = hands off: anything the mod changed is put back, then the game's vegetation is left alone. |
 | IncludeProfiles | (empty) | Only touch profiles whose name contains one of these. Empty = all. |
 | ShadowCasting | -1 | 0 = no vegetation shadows - big saving, doesn't change what you can see through. |
 | CustomShadowDistance, ShadowCulling | -1 | Vegetation shadow distance / culling. |
@@ -64,7 +64,7 @@ BasemapDistance - all -1 (leave).
 | MaximumLODLevel | -1 | 1 = never use LOD0, 2 = never LOD0/LOD1. |
 | LODCrossFade | -1 | 0 = no dithered fade between LODs (visible pops). |
 | HideTypes, HideAllDetails | (empty) / false | OPT-IN, low-end PCs only: don't draw some or all vegetation types at all. |
-| DetailDistance, DetailUpdateDistance, DetailDensityReduction | -1 | GPU Instancer's own detail draw / rebuild distances. |
+| DetailDistance, DetailUpdateDistance, DetailDensityReduction | -1 | GPU Instancer's own detail draw / rebuild distances and density reduction. -1 never touches the game's value (only puts back one the mod changed). |
 | ListVegetationTypes | false | Log every vegetation type with its name (for HideTypes). Needs VerboseLog. |
 
 **Display**: Width / Height / WindowMode / TargetFrameRate / VSync - all leave the game's values by default.
@@ -77,3 +77,11 @@ nothing (warnings still show).
 ## Build
 
 See [Building from source](../README.md#building-from-source); the project is `src/PotatoMode.csproj`.
+
+## When it runs
+
+- Textures, rendering, shadows, terrain and display settings: applied at start-up, then re-checked every
+  `ReapplyIntervalSeconds` (2 s) in case the game resets them. Only changed values are written.
+- GPUI vegetation: after every scene change (1, 3, 6, 12, 25 and 45 s after it, as the map loads), and once after
+  each config save. Nothing runs in between.
+

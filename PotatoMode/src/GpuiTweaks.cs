@@ -60,6 +60,7 @@ namespace PotatoMode
 
         static readonly Dictionary<IntPtr, Original> _originals = new();
         static readonly HashSet<IntPtr> _applied = new();
+        static readonly HashSet<IntPtr> _touched = new();   // profiles the plugin has changed (so Enabled = false knows what to put back)
         static readonly HashSet<string> _errorsLogged = new();
 
         public static void Init(ConfigFile cfg, ManualLogSource log)
@@ -70,7 +71,7 @@ namespace PotatoMode
             ShaderCache.Init(cfg, log);
 
             _enabled = cfg.Bind(Section, "Enabled", true,
-                "Master switch for the GPU Instancer vegetation tweaks. False restores every profile's original values.");
+                "Master switch for this whole section. false = hands off: puts back anything the plugin changed (profiles and the detail manager), then leaves the game's vegetation alone.");
 
             _include = cfg.Bind(Section, "IncludeProfiles", "",
                 "Comma-separated, case-insensitive substrings of GPUI profile names to modify. " +
@@ -148,9 +149,13 @@ namespace PotatoMode
             if (due) _scanStep++;
             _rescanRequested = false;
 
-            try { Scan(); }
-            catch (Exception e) { LogOnce("scan", "[GPUI] Scan failed: " + e); }
-            try { VegetationSwitch.Scan(); }
+            bool active = _enabled.Value;
+            if (active || _touched.Count > 0)
+            {
+                try { Scan(); }
+                catch (Exception e) { LogOnce("scan", "[GPUI] Scan failed: " + e); }
+            }
+            try { VegetationSwitch.Scan(active); }
             catch (Exception e) { LogOnce("vegswitch", "[Vegetation] Scan failed: " + e.Message); }
         }
 
@@ -212,15 +217,20 @@ namespace PotatoMode
         static void Apply(GPUIProfile p, Original o)
         {
             bool on = _enabled.Value && Included(o.Name);
+            bool touched = _touched.Contains(p.Pointer);
+            if (!on && !touched) return;                      // never changed by the plugin: leave the game's values alone
 
+            var changes = new List<string>();
+            // A setting at -1 only puts back the game's value if the plugin had changed this profile.
             bool shadow = on && _shadowCasting.Value >= 0 ? _shadowCasting.Value == 1 : o.ShadowCasting;
             float shadowDist = on && _shadowDistance.Value >= 0f ? _shadowDistance.Value : o.CustomShadowDistance;
             bool cull = on && _shadowCulling.Value == 1;
             float lodBias = on && _lodBiasAdjustment.Value > 0f ? o.LodBiasAdjustment * _lodBiasAdjustment.Value : o.LodBiasAdjustment;
             int maxLod = on && _maximumLODLevel.Value >= 0 ? _maximumLODLevel.Value : o.MaximumLODLevel;
             bool crossFade = on && _lodCrossFade.Value >= 0 ? _lodCrossFade.Value == 1 : o.CrossFade;
+            bool any = on && (_shadowCasting.Value >= 0 || _shadowDistance.Value >= 0f || _shadowCulling.Value == 1 || _lodBiasAdjustment.Value > 0f || _maximumLODLevel.Value >= 0 || _lodCrossFade.Value >= 0);
+            if (!any && !touched) return;
 
-            var changes = new List<string>();
             if (p.isShadowCasting != shadow) { changes.Add($"shadows {p.isShadowCasting}->{shadow}"); p.isShadowCasting = shadow; }
             if (!Mathf.Approximately(p.customShadowDistance, shadowDist)) { changes.Add($"customShadowDist {p.customShadowDistance}->{shadowDist}"); p.customShadowDistance = shadowDist; }
 
@@ -232,6 +242,8 @@ namespace PotatoMode
             if (!Mathf.Approximately(p.lodBiasAdjustment, lodBias)) { changes.Add($"lodBiasAdj {p.lodBiasAdjustment}->{lodBias}"); p.lodBiasAdjustment = lodBias; }
             if (p.maximumLODLevel != maxLod) { changes.Add($"maxLOD {p.maximumLODLevel}->{maxLod}"); p.maximumLODLevel = maxLod; }
             if (p.isLODCrossFade != crossFade) { changes.Add($"crossFade {p.isLODCrossFade}->{crossFade}"); p.isLODCrossFade = crossFade; }
+
+            if (any) _touched.Add(p.Pointer); else _touched.Remove(p.Pointer);   // back on the game's values
 
             if (changes.Count == 0) return;
 

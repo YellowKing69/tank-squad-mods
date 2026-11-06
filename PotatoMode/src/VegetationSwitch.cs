@@ -7,6 +7,7 @@
 //   - HideAllDetails: switches off everything the terrain detail manager draws (grass, bushes, small plants);
 //   - DetailDistance / DetailUpdateDistance / DetailDensityReduction: the detail manager's own settings
 //     (separate from Unity's terrain detail distance in [Terrain], which GPUI does not use);
+//     at -1 the game's value is never touched - only a value the plugin changed is put back;
 //   (WarmupShaders was removed in 1.3.1: Shader.WarmupAllShaders crashed the game on a player's PC.)
 // Everything is restored when the setting is cleared. Called from GpuiTweaks' scan schedule.
 
@@ -34,7 +35,10 @@ namespace PotatoMode
 
         static readonly HashSet<string> _listed = new();
         static readonly Dictionary<(IntPtr mgr, int idx), bool> _offByUs = new();
-        static readonly Dictionary<IntPtr, (float dist, float upd)> _detailOrig = new();
+        // The game's own detail values, recorded just before the plugin first changes them (per detail manager).
+        // A setting at -1 never touches the game's value; it only puts back what the plugin changed itself.
+        static readonly Dictionary<IntPtr, float> _origDist = new(), _origUpd = new();
+        static readonly Dictionary<IntPtr, bool> _origDensity = new();
 
         public static void Init(ConfigFile cfg, ManualLogSource log)
         {
@@ -76,11 +80,14 @@ namespace PotatoMode
             return "objects";
         }
 
-        public static void Scan()
+        // active = false ([GPUI Vegetation] Enabled = false): only put back what the plugin changed, then leave the game alone.
+        public static void Scan(bool active = true)
         {
             var names = new List<string>();
-            foreach (var part in (_hideTypes.Value ?? "").Split(','))
-            { var t = part.Trim().ToLowerInvariant(); if (t.Length > 0) names.Add(t); }
+            if (active)
+                foreach (var part in (_hideTypes.Value ?? "").Split(','))
+                { var t = part.Trim().ToLowerInvariant(); if (t.Length > 0) names.Add(t); }
+            if (!active && _offByUs.Count == 0 && _origDist.Count == 0 && _origUpd.Count == 0 && _origDensity.Count == 0) return;
 
             var mgrs = UnityEngine.Object.FindObjectsOfType<GPUIManager>();
             if (mgrs == null) return;
@@ -91,10 +98,10 @@ namespace PotatoMode
                 string kind = Kind(m);
                 int count; try { count = m.GetPrototypeCount(); } catch { continue; }
 
-                if (kind == "details") DetailSettings(m.TryCast<GPUIDetailManager>(), mp);
+                if (kind == "details") DetailSettings(m.TryCast<GPUIDetailManager>(), mp, active);
 
                 StringBuilder sb = null;
-                if (_list.Value && _listed.Add($"{mp}:{count}:{SceneManager.GetActiveScene().handle}"))
+                if (active && _list.Value && _listed.Add($"{mp}:{count}:{SceneManager.GetActiveScene().handle}"))
                     sb = new StringBuilder($"[Vegetation] {kind} manager '{m.name}': {count} types");
                 for (int i = 0; i < count; i++)
                 {
@@ -102,7 +109,7 @@ namespace PotatoMode
                     if (p == null) continue;
                     string n = ProtoName(p);
                     string nl = n.ToLowerInvariant();
-                    bool wantOff = (kind == "details" && _hideAllDetails.Value) || names.Exists(x => nl.Contains(x));
+                    bool wantOff = active && ((kind == "details" && _hideAllDetails.Value) || names.Exists(x => nl.Contains(x)));
                     bool isOn = true; try { isOn = p.isEnabled; } catch { }
                     var key = (mp, i);
                     if (wantOff && isOn) { Switch(m, p, i, false); _offByUs[key] = true; Quiet.Info(_log, $"[Vegetation] hidden: {kind} '{n}'"); }
@@ -123,24 +130,67 @@ namespace PotatoMode
             catch (Exception e) { _log.LogWarning($"[Vegetation] switch failed: {e.Message}"); }
         }
 
-        static void DetailSettings(GPUIDetailManager dm, IntPtr mp)
+        static void DetailSettings(GPUIDetailManager dm, IntPtr mp, bool active)
         {
             if (dm == null) return;
             try
             {
-                if (!_detailOrig.TryGetValue(mp, out var o))
+                // Draw distance
+                float d = active ? _detailDistance.Value : -1f;
+                if (d >= 0)
                 {
-                    o = (dm.detailObjectDistance, dm.detailUpdateDistance);
-                    _detailOrig[mp] = o;
-                    Quiet.Info(_log, $"[Vegetation] detail manager '{dm.name}': draw distance {o.dist:0.#} m, update distance {o.upd:0.#} m");
+                    if (!_origDist.ContainsKey(mp)) { _origDist[mp] = dm.detailObjectDistance; Quiet.Info(_log, $"[Vegetation] '{dm.name}': game detail distance {dm.detailObjectDistance:0.#} m"); }
+                    if (Math.Abs(dm.detailObjectDistance - d) > 0.01f) { Quiet.Info(_log, $"[Vegetation] detail distance {dm.detailObjectDistance:0.#} -> {d:0.#} m"); dm.SetDetailObjectDistance(d); }
                 }
-                float wantD = _detailDistance.Value >= 0 ? _detailDistance.Value : o.dist;
-                if (Math.Abs(dm.detailObjectDistance - wantD) > 0.01f) { Quiet.Info(_log, $"[Vegetation] detail distance {dm.detailObjectDistance:0.#} -> {wantD:0.#} m"); dm.SetDetailObjectDistance(wantD); }
-                float wantU = _detailUpdateDistance.Value >= 0 ? _detailUpdateDistance.Value : o.upd;
-                if (Math.Abs(dm.detailUpdateDistance - wantU) > 0.01f) { Quiet.Info(_log, $"[Vegetation] detail update distance {dm.detailUpdateDistance:0.#} -> {wantU:0.#} m"); dm.detailUpdateDistance = wantU; }
-                if (_densityReduction.Value >= 0) dm.SetDistanceDensityReduction(_densityReduction.Value == 1);
+                else if (_origDist.TryGetValue(mp, out var od))
+                {
+                    _origDist.Remove(mp);
+                    Quiet.Info(_log, $"[Vegetation] detail distance back to the game's {od:0.#} m");
+                    dm.SetDetailObjectDistance(od);
+                }
+
+                // Update (rebuild) distance
+                float u = active ? _detailUpdateDistance.Value : -1f;
+                if (u >= 0)
+                {
+                    if (!_origUpd.ContainsKey(mp)) _origUpd[mp] = dm.detailUpdateDistance;
+                    if (Math.Abs(dm.detailUpdateDistance - u) > 0.01f) { Quiet.Info(_log, $"[Vegetation] detail update distance {dm.detailUpdateDistance:0.#} -> {u:0.#} m"); dm.detailUpdateDistance = u; }
+                }
+                else if (_origUpd.TryGetValue(mp, out var ou))
+                {
+                    _origUpd.Remove(mp);
+                    Quiet.Info(_log, $"[Vegetation] detail update distance back to the game's {ou:0.#} m");
+                    dm.detailUpdateDistance = ou;
+                }
+
+                // Distance density reduction (the game's value is read from its GPUI terrains)
+                int r = active ? _densityReduction.Value : -1;
+                bool? cur = DensityReduction();
+                if (r >= 0)
+                {
+                    bool want = r == 1;
+                    if (!_origDensity.ContainsKey(mp) && cur.HasValue) _origDensity[mp] = cur.Value;
+                    if (cur != want) { Quiet.Info(_log, $"[Vegetation] detail density reduction -> {want}"); dm.SetDistanceDensityReduction(want); }
+                }
+                else if (_origDensity.TryGetValue(mp, out var orr))
+                {
+                    _origDensity.Remove(mp);
+                    if (cur != orr) { Quiet.Info(_log, $"[Vegetation] detail density reduction back to the game's {orr}"); dm.SetDistanceDensityReduction(orr); }
+                }
             }
             catch (Exception e) { _log.LogWarning("[Vegetation] detail settings: " + e.Message); }
+        }
+
+        // The game's current density-reduction switch (from the first GPUI terrain), or null if none is found.
+        static bool? DensityReduction()
+        {
+            try
+            {
+                var ts = UnityEngine.Object.FindObjectsOfType<GPUITerrain>();
+                if (ts != null) for (int i = 0; i < ts.Length; i++) if (ts[i] != null) return ts[i].enableDetailDensityReduction;
+            }
+            catch { }
+            return null;
         }
     }
 }
