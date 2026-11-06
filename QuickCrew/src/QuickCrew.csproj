@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Build: dotnet build -c Release -p:Ref="<Tank Squad>\BepInEx"
+       then run tools/retarget on bin/Release/net8.0/QuickCrew.dll (see the repo README). -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <AssemblyName>QuickCrew</AssemblyName>
+    <RootNamespace>TankSquadQuickCrew</RootNamespace>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
+    <GenerateDependencyFile>false</GenerateDependencyFile>
+    <DebugType>none</DebugType>
+    <!-- Your game's BepInEx folder (after BepInEx has run once, so BepInEx\interop exists). -->
+    <Ref Condition="'$(Ref)' == ''">C:\Program Files (x86)\Steam\steamapps\common\Tank Squad\BepInEx</Ref>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="$(Ref)/core/*.dll" Private="false" />
+    <Reference Include="$(Ref)/interop/*.dll" Private="false" />
+  </ItemGroup>
+</Project>

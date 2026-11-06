@@ -8,6 +8,7 @@ BepInEx 6 (IL2CPP) plugins, with their source.
 | Mod | What it does |
 |---|---|
 | [PotatoMode](PotatoMode/) | Lower graphics memory / GPU load: textures, render scale, shadows, terrain, vegetation (formerly PotatoInjector) |
+| [QuickCrew](QuickCrew/) | Shorter holds, faster hatch / visor / binocular transitions, seat and squad-attack hotkeys, AI gunner control |
 | [PotatoVFX](PotatoVFX/) | Lighter shell and MG tracers, barrel smoke and rocket-trail toggles |
 
 ## First-time setup (once per game install)
