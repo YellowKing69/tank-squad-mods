@@ -52,15 +52,15 @@ namespace PotatoMode
                 "This breaks the 'never change what is drawn' rule of this section on purpose: bushes still hide units from the AI " +
                 "(the AI uses separate visibility volumes), you simply see through them. Empty = nothing hidden.");
             _hideAllDetails = cfg.Bind(Section, "HideAllDetails", false,
-                "OPT-IN, low-end PCs only. true = draw nothing from the terrain detail manager (grass, bushes, small plants). Biggest vegetation saving.");
+                "OPT-IN, low-end PCs only. true = draw nothing from the terrain detail manager (grass, bushes, small plants): its draw distance is set to 0 m (overrides DetailDistance). Biggest vegetation saving. Takes effect when a map loads: restart the mission (or load another map) after changing it.");
             _detailDistance = cfg.Bind(Section, "DetailDistance", -1f,
                 "Draw distance (m) of the GPU Instancer terrain detail manager. This is NOT the same as [Terrain] DetailDistance (Unity's own, " +
-                "which GPUI ignores) - that is why details can still show when everything else is off. -1 = leave. Shorter = fewer details drawn.");
+                "which GPUI ignores) - that is why details can still show when everything else is off. -1 = leave. Shorter = fewer details drawn. Takes effect when a map loads: restart the mission (or load another map) after changing it.");
             _detailUpdateDistance = cfg.Bind(Section, "DetailUpdateDistance", -1f,
                 "How far (m) the camera must move before GPU Instancer rebuilds the details around it. Each rebuild is a burst of GPU work " +
-                "(a spike while driving). -1 = leave. Higher = fewer rebuilds; too high and details thin out at the edge before the next rebuild.");
+                "(a spike while driving). -1 = leave. Higher = fewer rebuilds; too high and details thin out at the edge before the next rebuild. If you see no change, restart the mission: the detail grid is built when a map loads.");
             _densityReduction = cfg.Bind(Section, "DetailDensityReduction", -1,
-                new ConfigDescription("GPU Instancer's distance density reduction for details (fewer details further away). -1 = leave, 0 = off, 1 = on.",
+                new ConfigDescription("GPU Instancer's distance density reduction for details (fewer details further away). -1 = leave, 0 = off, 1 = on. If you see no change, restart the mission: the detail grid is built when a map loads.",
                     new AcceptableValueRange<int>(-1, 1)));
         }
 
@@ -109,7 +109,10 @@ namespace PotatoMode
                     if (p == null) continue;
                     string n = ProtoName(p);
                     string nl = n.ToLowerInvariant();
-                    bool wantOff = active && ((kind == "details" && _hideAllDetails.Value) || names.Exists(x => nl.Contains(x)));
+                    // HideAllDetails works through the detail draw distance (0 m, see DetailSettings), not by switching every
+                    // detail type off: switched-off types made GPU Instancer rebuild its detail buffers over and over (GPU load up,
+                    // fps down). Only HideTypes switches types off.
+                    bool wantOff = active && names.Exists(x => nl.Contains(x));
                     bool isOn = true; try { isOn = p.isEnabled; } catch { }
                     var key = (mp, i);
                     if (wantOff && isOn) { Switch(m, p, i, false); _offByUs[key] = true; Quiet.Info(_log, $"[Vegetation] hidden: {kind} '{n}'"); }
@@ -136,7 +139,7 @@ namespace PotatoMode
             try
             {
                 // Draw distance
-                float d = active ? _detailDistance.Value : -1f;
+                float d = active ? (_hideAllDetails.Value ? 0f : _detailDistance.Value) : -1f;   // hide all = draw details out to 0 m
                 if (d >= 0)
                 {
                     if (!_origDist.ContainsKey(mp)) { _origDist[mp] = dm.detailObjectDistance; Quiet.Info(_log, $"[Vegetation] '{dm.name}': game detail distance {dm.detailObjectDistance:0.#} m"); }

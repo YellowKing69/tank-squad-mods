@@ -1,4 +1,4 @@
-# Potato Mode 1.4.4 (PotatoInjector)
+# Potato Mode 1.5.0 (PotatoInjector)
 
 Lower graphics memory and GPU load for Tank Squad on weaker PCs: texture mips, render scale, shadows, terrain and
 GPU Instancer vegetation settings, plus an optional shader warm-up. Runtime settings only - no game files are changed.
@@ -53,6 +53,12 @@ marked **bold**.
 **Terrain** (Unity terrain): DetailDensityScale, DetailDistance, TreeDistance, BillboardStart, MaxFullTrees, PixelError,
 BasemapDistance - all -1 (leave).
 
+| Setting | Default | |
+|---|---|---|
+| Tessellation | -1 | The ground's fine bumps and ruts (added by the graphics card): 0 = off (the menu's Low), 1 = medium (5x, 10-100 m), 2 = high (10x, 20-200 m). -1 = the game's menu option (Settings > Environment > Terrain Tesselation Quality). Changes live. |
+| TessellationFactor | -1 | Custom subdivision instead of the level's: 1 = none, 5 = medium, 10 = high, up to 32. |
+| TessellationDistance | -1 | Custom distance in metres out to which the ground is tessellated (medium 100, high 200). |
+
 **GPUI Vegetation** (the game's trees, bushes and grass are drawn by GPU Instancer)
 | Setting | Default | |
 |---|---|---|
@@ -63,8 +69,12 @@ BasemapDistance - all -1 (leave).
 | LodBiasScale | -1 | Multiplies each profile's own LOD bias (e.g. 0.6). |
 | MaximumLODLevel | -1 | 1 = never use LOD0, 2 = never LOD0/LOD1. |
 | LODCrossFade | -1 | 0 = no dithered fade between LODs (visible pops). |
-| HideTypes, HideAllDetails | (empty) / false | OPT-IN, low-end PCs only: don't draw some or all vegetation types at all. |
+| MaxDistanceScale | -1 | Multiplies how far each vegetation type is drawn (0.5 = half as far). For trees only, name the tree profiles in IncludeProfiles. Changes what you can see at a distance: single-player / benchmarking only. |
+| HideTypes, HideAllDetails | (empty) / false | OPT-IN, low-end PCs only: don't draw some or all vegetation types at all. HideAllDetails sets the detail draw distance to 0 m. |
 | DetailDistance, DetailUpdateDistance, DetailDensityReduction | -1 | GPU Instancer's own detail draw / rebuild distances and density reduction. -1 never touches the game's value (only puts back one the mod changed). |
+
+HideAllDetails and the three Detail settings take effect when a map loads: after changing them, restart the mission
+(or load another map). The tree draw-distance setting of 1.4.x is gone: changing it in a battle drew the trees twice.
 | ListVegetationTypes | false | Log every vegetation type with its name (for HideTypes). Needs VerboseLog. |
 
 **Display**: Width / Height / WindowMode / TargetFrameRate / VSync - all leave the game's values by default.
@@ -72,7 +82,8 @@ BasemapDistance - all -1 (leave).
 **General**: ReapplyIntervalSeconds (-1 = off: settings are applied at start-up and whenever the config is saved; set e.g. 2 if the game undoes them), LiveReloadConfig (true), TickHooks (leave as is).
 
 **Debug**: `VerboseLog` (false) - writes what the plugin found and changed to the BepInEx log. Off = the plugin logs
-nothing (warnings still show).
+nothing (warnings still show). `TerrainReport` (false) - writes the terrain's actual values and the game's menu settings
+for them (lines starting `[Terrain]`), and again whenever one changes.
 
 ## Build
 

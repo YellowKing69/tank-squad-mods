@@ -29,7 +29,7 @@ namespace PotatoMode
     {
         public const string Guid = "potatomode.vramtweaks";
         public const string PluginName = "Potato Mode";
-        public const string PluginVersion = "1.4.4";
+        public const string PluginVersion = "1.5.0";
 
         internal static PotatoModePlugin Instance;
 
@@ -181,6 +181,8 @@ namespace PotatoMode
             // GPU Instancer vegetation (bushes/trees). Must bind BEFORE Config.Save() below,
             // otherwise its settings never get written to the .cfg file.
             GpuiTweaks.Init(Config, Log);
+            TerrainReport.Init(Config, Log);
+            TerrainTess.Init(Config, Log);
 
             // Write the file once, then stop auto-saving so a live reload can never re-trigger the file watcher.
             Config.Save();
@@ -244,6 +246,7 @@ namespace PotatoMode
 
         public static void TickPostfix() => Instance?.SafeTick();
 
+        bool _tessFailed;
         void SafeTick()
         {
             try { Tick(); }
@@ -255,6 +258,8 @@ namespace PotatoMode
 
             // Scans on its own schedule after each scene change (and after a config change); catches its own errors.
             try { GpuiTweaks.Tick(); } catch { /* already logged inside GpuiTweaks */ }
+            try { TerrainTess.Tick(); } catch (Exception e) { if (!_tessFailed) { _tessFailed = true; Log.LogWarning("[Terrain] tessellation: " + e.Message); } }
+            try { TerrainReport.Tick(); } catch { /* catches its own errors */ }
         }
 
         void StartWatcher()

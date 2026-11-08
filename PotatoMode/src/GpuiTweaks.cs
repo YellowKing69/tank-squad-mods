@@ -49,12 +49,14 @@ namespace PotatoMode
         static ConfigEntry<float> _lodBiasAdjustment;
         static ConfigEntry<int> _maximumLODLevel;
         static ConfigEntry<int> _lodCrossFade;
+        static ConfigEntry<float> _maxDistanceScale;
 
         sealed class Original
         {
             public string Name;
             public bool ShadowCasting, CrossFade, ShadowDistCull, ShadowFrustCull, ShadowOccCull;
             public float CustomShadowDistance, LodBiasAdjustment;
+            public Vector2 MinMaxDistance;
             public int MaximumLODLevel;
         }
 
@@ -110,6 +112,18 @@ namespace PotatoMode
                     "Dithered cross-fade between LODs (isLODCrossFade). -1 = leave, 0 = off, 1 = on. " +
                     "Off saves work during transitions but LOD switches become visible pops.",
                     new AcceptableValueRange<int>(-1, 1)));
+
+            // Draw distance. These two change how far away vegetation is drawn, which the rule at the top of this file
+            // otherwise keeps out: shorter distances show what's behind far tree lines. Off (-1) unless set on purpose -
+            // meant for single-player / benchmarking (Potato Bench presets), not for an edge in multiplayer.
+            _maxDistanceScale = cfg.Bind(Section, "MaxDistanceScale", -1f,
+                new ConfigDescription(
+                    "Multiplies how far each GPUI vegetation type (trees, bushes) is drawn (each profile's maximum draw distance, minMaxDistance). " +
+                    "-1 = leave the game's distances. 0.5 = half as far, 2 = twice as far. Changes live (GPU-side value). For trees only, put part of the tree profiles' names in IncludeProfiles (the log lists every profile). Changes what you can see at a distance: single-player / benchmarking only.",
+                    new AcceptableValueRange<float>(-1f, 4f)));
+            // (TreeDistance was removed in 1.5.0: GPUITerrain.SetTerrainTreeDistance during a battle registers the terrain's trees
+            //  again without removing the old ones - trees drawn twice, frame rate halved until the map is reloaded.
+            //  Use MaxDistanceScale, limited to the tree profiles with IncludeProfiles, instead.)
 
             // Re-apply everything when the config changes or is live-reloaded.
             cfg.SettingChanged += (_, _) => { _applied.Clear(); _rescanRequested = true; };
@@ -201,6 +215,7 @@ namespace PotatoMode
             if (newProfiles) LogDrawerCount();
         }
 
+
         static Original Capture(GPUIProfile p, string name) => new Original
         {
             Name = name,
@@ -212,6 +227,7 @@ namespace PotatoMode
             LodBiasAdjustment = p.lodBiasAdjustment,
             MaximumLODLevel = p.maximumLODLevel,
             CrossFade = p.isLODCrossFade,
+            MinMaxDistance = p.minMaxDistance,
         };
 
         static void Apply(GPUIProfile p, Original o)
@@ -228,7 +244,8 @@ namespace PotatoMode
             float lodBias = on && _lodBiasAdjustment.Value > 0f ? o.LodBiasAdjustment * _lodBiasAdjustment.Value : o.LodBiasAdjustment;
             int maxLod = on && _maximumLODLevel.Value >= 0 ? _maximumLODLevel.Value : o.MaximumLODLevel;
             bool crossFade = on && _lodCrossFade.Value >= 0 ? _lodCrossFade.Value == 1 : o.CrossFade;
-            bool any = on && (_shadowCasting.Value >= 0 || _shadowDistance.Value >= 0f || _shadowCulling.Value == 1 || _lodBiasAdjustment.Value > 0f || _maximumLODLevel.Value >= 0 || _lodCrossFade.Value >= 0);
+            Vector2 mm = on && _maxDistanceScale.Value > 0f ? new Vector2(o.MinMaxDistance.x, o.MinMaxDistance.y * _maxDistanceScale.Value) : o.MinMaxDistance;
+            bool any = on && (_shadowCasting.Value >= 0 || _shadowDistance.Value >= 0f || _shadowCulling.Value == 1 || _lodBiasAdjustment.Value > 0f || _maximumLODLevel.Value >= 0 || _lodCrossFade.Value >= 0 || _maxDistanceScale.Value > 0f);
             if (!any && !touched) return;
 
             if (p.isShadowCasting != shadow) { changes.Add($"shadows {p.isShadowCasting}->{shadow}"); p.isShadowCasting = shadow; }
@@ -242,6 +259,7 @@ namespace PotatoMode
             if (!Mathf.Approximately(p.lodBiasAdjustment, lodBias)) { changes.Add($"lodBiasAdj {p.lodBiasAdjustment}->{lodBias}"); p.lodBiasAdjustment = lodBias; }
             if (p.maximumLODLevel != maxLod) { changes.Add($"maxLOD {p.maximumLODLevel}->{maxLod}"); p.maximumLODLevel = maxLod; }
             if (p.isLODCrossFade != crossFade) { changes.Add($"crossFade {p.isLODCrossFade}->{crossFade}"); p.isLODCrossFade = crossFade; }
+            if (!Mathf.Approximately(p.minMaxDistance.y, mm.y)) { changes.Add($"maxDistance {p.minMaxDistance.y:0.#}->{mm.y:0.#}"); p.minMaxDistance = mm; }
 
             if (any) _touched.Add(p.Pointer); else _touched.Remove(p.Pointer);   // back on the game's values
 
